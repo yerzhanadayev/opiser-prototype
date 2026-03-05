@@ -294,6 +294,8 @@ export default function Kadry() {
                 <tr>
                   <th>Партия</th>
                   <th>Председатель</th>
+                  <th>Численность</th>
+                  <th>Кол-во депутатов</th>
                   <th>Дата обновления</th>
                   <th>Статус</th>
                   <th></th>
@@ -313,6 +315,8 @@ export default function Kadry() {
                       </div>
                     </td>
                     <td>{p.chairman}</td>
+                    <td>{p.membership ?? '—'}</td>
+                    <td>{p.deputiesCount ?? '—'}</td>
                     <td>{p.updatedAt}</td>
                     <td><span className={`badge ${statusClass(p.status)}`}>{p.status}</span></td>
                     <td>
