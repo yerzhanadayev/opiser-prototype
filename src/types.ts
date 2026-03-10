@@ -74,6 +74,22 @@ export interface SERIndicator {
   period2: string
   value2: number | string
   unit: string
+  /** Текущий период по этому показателю */
+  year: number
+  periodType: SERPeriodType
+  periodValue: number
+  updatedAt?: string
+  /** Снимки за сохранённые периоды для просмотра истории */
+  history?: SERIndicatorHistoryEntry[]
+}
+
+export interface SERIndicatorHistoryEntry {
+  year: number
+  periodType: SERPeriodType
+  periodValue: number
+  value1: number | string
+  value2: number | string
+  updatedAt: string
 }
 
 export interface SERBudgetRow {
@@ -82,13 +98,36 @@ export interface SERBudgetRow {
   plan: number
   execution: number
   percent: number
+  sharePercent?: number
 }
 
+export type SERPeriodType = 'month' | 'quarter'
+
 export interface SERData {
-  period: string
   updatedAt: string
   slide29: SERIndicator[]
   slide30: SERIndicator[]
   revenues: SERBudgetRow[]
   expenses: SERBudgetRow[]
+  planYear: number
+  executionLabel: string
 }
+
+/** 15 функциональных групп затрат по ТЗ 4.1 п. 3.5 (коды 01–15) */
+export const EXPENSE_GROUPS = [
+  'Государственные услуги общего характера',
+  'Оборона',
+  'Общественный порядок, безопасность, правовая, судебная, уголовно-исполнительная деятельность',
+  'Образование',
+  'Здравоохранение',
+  'Социальная помощь и социальное обеспечение',
+  'Жилищно-коммунальное хозяйство',
+  'Культура, спорт, туризм и информационное пространство',
+  'Топливно-энергетический комплекс и недропользование',
+  'Сельское, водное, лесное, рыбное хозяйство, особо охраняемые природные территории, охрана окружающей среды и животного мира, земельные отношения',
+  'Промышленность, архитектурная, градостроительная и строительная деятельность',
+  'Транспорт и коммуникации',
+  'Прочие',
+  'Обслуживание долга',
+  'Трансферты',
+] as const

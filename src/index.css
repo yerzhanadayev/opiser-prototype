@@ -342,6 +342,24 @@ tr:hover td {
   color: var(--text-secondary, #666);
 }
 
+/* СЭР: цветовая индикация изменения показателей (п. 3.6 ТЗ) */
+.ser-change-green {
+  color: #0a7c42;
+  font-weight: 600;
+}
+.ser-change-red {
+  color: #c41e3a;
+  font-weight: 600;
+}
+.ser-expense-top5 {
+  background: rgba(0, 82, 204, 0.06);
+}
+.ser-top5-badge {
+  font-size: 11px;
+  color: var(--primary);
+  margin-left: 6px;
+}
+
 .drawer-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--border);
