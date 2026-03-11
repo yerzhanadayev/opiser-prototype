@@ -51,15 +51,11 @@ function getChangeColor(indicatorName: string, changeNum: number): 'green' | 're
   return isPositive ? 'green' : 'red'
 }
 
-/** Расчёт изменения по единице измерения: % — относительное в %, иначе разница */
-function calcChangeByUnit(value1: number | string, value2: number | string, unit: string): number | '' {
+/** Изменение = разница в тех же единицах (по образцу слайдов); относительный прирост не считается */
+function calcChangeByUnit(value1: number | string, value2: number | string): number | '' {
   const n1 = typeof value1 === 'string' ? parseFloat(value1) : value1
   const n2 = typeof value2 === 'string' ? parseFloat(value2) : value2
   if (Number.isNaN(n1) || Number.isNaN(n2)) return ''
-  if (unit === '%') {
-    if (n1 === 0) return ''
-    return Math.round((n2 - n1) / n1 * 10000) / 100
-  }
   return Math.round((n2 - n1) * 1000) / 1000
 }
 
@@ -84,7 +80,8 @@ const SLIDE30_NAMES_UNITS: { name: string; unit: string }[] = [
 ]
 
 const REVENUES_NAMES = ['Всего по доходам', 'Налоговые поступления', 'Неналоговые поступления', 'Поступления от продажи основного капитала', 'Трансферты']
-const DEFAULT_EXECUTION_OPTIONS = ['на 01.01.2025 г.', 'на 01.07.2025 г.', 'на 01.10.2025 г.', 'на 01.01.2026 г.', 'на 01.03.2026 г.', 'на 01.07.2026 г.']
+/** Исполнение — на первое число месяца; год исполнения = год плана */
+const EXECUTION_MONTH_OPTIONS = ['на 1 февраля', 'на 1 марта', 'на 1 апреля', 'на 1 мая', 'на 1 июня', 'на 1 июля', 'на 1 августа', 'на 1 сентября', 'на 1 октября', 'на 1 ноября', 'на 1 декабря', 'на 1 января следующего года']
 const YEARS = [2024, 2025, 2026, 2027]
 
 function defaultBudgetRows(names: string[]): SERBudgetRow[] {
@@ -161,7 +158,7 @@ function loadSER(): SERData {
           revenues: parsed.revenues ?? defaultBudgetRows(REVENUES_NAMES),
           expenses: parsed.expenses.length > 1 ? parsed.expenses : defaultExpenses(),
           planYear: parsed.planYear ?? 2025,
-          executionLabel: parsed.executionLabel ?? 'на 01.01.2026 г.',
+          executionLabel: EXECUTION_MONTH_OPTIONS.includes(parsed.executionLabel as string) ? parsed.executionLabel : EXECUTION_MONTH_OPTIONS[0],
         }
       }
     }
@@ -173,7 +170,7 @@ function loadSER(): SERData {
     revenues: defaultBudgetRows(REVENUES_NAMES),
     expenses: defaultExpenses(),
     planYear: 2025,
-    executionLabel: 'на 01.01.2026 г.',
+    executionLabel: EXECUTION_MONTH_OPTIONS[0],
   }
 }
 
@@ -230,7 +227,7 @@ function IndicatorRow({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedHistory, setSelectedHistory] = useState<SERIndicatorHistoryEntry | null>(null)
   const labels = useMemo(() => getPeriodLabels(indicator.year, indicator.periodType, indicator.periodValue), [indicator.year, indicator.periodType, indicator.periodValue])
-  const changeVal = calcChangeByUnit(indicator.value1, indicator.value2, indicator.unit)
+  const changeVal = calcChangeByUnit(indicator.value1, indicator.value2)
   const changeColor = changeVal !== '' ? getChangeColor(indicator.name, changeVal) : null
   const history = indicator.history ?? []
 
@@ -315,7 +312,7 @@ function IndicatorRow({
 
 export default function SER() {
   const [planYear, setPlanYear] = useState(2025)
-  const [executionLabel, setExecutionLabel] = useState('на 01.01.2026 г.')
+  const [executionLabel, setExecutionLabel] = useState(EXECUTION_MONTH_OPTIONS[0])
   const [data, setData] = useState<SERData>(loadSER)
 
   const updateIndicator = (slide: 'slide29' | 'slide30', id: string, field: keyof SERIndicator, value: number | string) => {
@@ -367,22 +364,45 @@ export default function SER() {
     }))
   }
 
+  /** Итоги по доходам: первая строка «Всего» = сумма строк 1–4 (автоматически) */
+  const revenuesWithTotal = useMemo(() => {
+    const list = data.revenues
+    if (list.length < 5) return list
+    const planTotal = list.slice(1, 5).reduce((s, r) => s + (r.plan || 0), 0)
+    const execTotal = list.slice(1, 5).reduce((s, r) => s + (r.execution || 0), 0)
+    return list.map((r, idx) =>
+      idx === 0 ? { ...r, plan: planTotal, execution: execTotal, percent: calcPercent(planTotal, execTotal) } : r
+    )
+  }, [data.revenues])
+
+  /** Общая сумма затрат по плану (для удельного веса и топ-5) */
+  const totalExpensePlan = useMemo(() => {
+    const list = data.expenses
+    if (list.length <= 1) return 0
+    return list.slice(1).reduce((s, r) => s + (r.plan || 0), 0)
+  }, [data.expenses])
+
+  /** Итоги по затратам: первая строка «Всего» = сумма групп; уд. вес от плана; топ-5 по плану */
   const expensesWithShare = useMemo(() => {
     const list = data.expenses
     if (list.length <= 1) return list
-    const total = list[0].execution || 0
-    return list.map((r, idx) => ({
-      ...r,
-      sharePercent: idx === 0 ? 0 : (total ? Math.round((r.execution / total) * 1000) / 10 : 0),
-    }))
-  }, [data.expenses])
+    const totalPlan = totalExpensePlan
+    const totalExecution = list.slice(1).reduce((s, r) => s + (r.execution || 0), 0)
+    return list.map((r, idx) => {
+      if (idx === 0) {
+        return { ...r, plan: totalPlan, execution: totalExecution, percent: calcPercent(totalPlan, totalExecution), sharePercent: 0 }
+      }
+      const sharePercent = totalPlan ? Math.round((r.plan || 0) / totalPlan * 1000) / 10 : 0
+      return { ...r, sharePercent }
+    })
+  }, [data.expenses, totalExpensePlan])
 
   const top5ExpenseIndices = useMemo(() => {
-    if (expensesWithShare.length <= 1) return new Set<number>()
-    const withIndex = expensesWithShare.slice(1).map((r, i) => ({ i: i + 1, share: r.sharePercent ?? 0 }))
-    withIndex.sort((a, b) => b.share - a.share)
+    if (data.expenses.length <= 1) return new Set<number>()
+    const withIndex = data.expenses.slice(1).map((r, i) => ({ i: i + 1, plan: r.plan || 0 }))
+    withIndex.sort((a, b) => b.plan - a.plan)
     return new Set(withIndex.slice(0, 5).map((x) => x.i))
-  }, [expensesWithShare])
+  }, [data.expenses])
 
   return (
     <>
@@ -404,7 +424,7 @@ export default function SER() {
             <thead>
               <tr>
                 <th>Показатель</th>
-                <th>Год</th>
+                <th>Отчётный год</th>
                 <th>Период</th>
                 <th>Период сравнения</th>
                 <th>Значение</th>
@@ -429,7 +449,7 @@ export default function SER() {
             <thead>
               <tr>
                 <th>Показатель</th>
-                <th>Год</th>
+                <th>Отчётный год</th>
                 <th>Период</th>
                 <th>Период сравнения</th>
                 <th>Значение</th>
@@ -459,10 +479,11 @@ export default function SER() {
           <div className="form-group" style={{ maxWidth: 180 }}>
             <label>Период исполнения</label>
             <select value={executionLabel} onChange={(e) => setExecutionLabel(e.target.value)}>
-              {DEFAULT_EXECUTION_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              {EXECUTION_MONTH_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
         </div>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>План — с учётом последних актуальных уточнений и корректировок.</p>
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>ДОХОДЫ, в т.ч.</p>
         <div className="table-wrap" style={{ marginBottom: 16 }}>
           <table>
@@ -475,11 +496,20 @@ export default function SER() {
               </tr>
             </thead>
             <tbody>
-              {data.revenues.map((r) => (
+              {revenuesWithTotal.map((r, idx) => (
                 <tr key={r.id}>
                   <td>{r.name}</td>
-                  <td><input type="number" value={r.plan || ''} onChange={(e) => updateBudget('revenues', r.id, 'plan', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
-                  <td><input type="number" value={r.execution || ''} onChange={(e) => updateBudget('revenues', r.id, 'execution', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                  {idx === 0 ? (
+                    <>
+                      <td style={{ background: 'var(--bg-muted)' }}>{r.plan || '—'}</td>
+                      <td style={{ background: 'var(--bg-muted)' }}>{r.execution || '—'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td><input type="number" value={r.plan || ''} onChange={(e) => updateBudget('revenues', r.id, 'plan', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                      <td><input type="number" value={r.execution || ''} onChange={(e) => updateBudget('revenues', r.id, 'execution', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                    </>
+                  )}
                   <td>{r.percent ? `${r.percent}%` : '—'}</td>
                 </tr>
               ))}
@@ -502,8 +532,17 @@ export default function SER() {
               {expensesWithShare.map((r, idx) => (
                 <tr key={r.id} className={top5ExpenseIndices.has(idx) ? 'ser-expense-top5' : ''}>
                   <td>{r.name}{top5ExpenseIndices.has(idx) && <span className="ser-top5-badge"> топ-5</span>}</td>
-                  <td><input type="number" value={r.plan || ''} onChange={(e) => updateBudget('expenses', r.id, 'plan', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
-                  <td><input type="number" value={r.execution || ''} onChange={(e) => updateBudget('expenses', r.id, 'execution', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                  {idx === 0 ? (
+                    <>
+                      <td style={{ background: 'var(--bg-muted)' }}>{r.plan || '—'}</td>
+                      <td style={{ background: 'var(--bg-muted)' }}>{r.execution || '—'}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td><input type="number" value={r.plan || ''} onChange={(e) => updateBudget('expenses', r.id, 'plan', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                      <td><input type="number" value={r.execution || ''} onChange={(e) => updateBudget('expenses', r.id, 'execution', Number(e.target.value) || 0)} style={{ width: 120, border: '1px solid var(--border)', borderRadius: 4, padding: 6 }} /></td>
+                    </>
+                  )}
                   <td>{r.percent ? `${r.percent}%` : '—'}</td>
                   <td>{idx > 0 && (r.sharePercent ?? 0) > 0 ? `${r.sharePercent}%` : '—'}</td>
                 </tr>
