@@ -9,6 +9,7 @@ const SER_STORAGE_KEY = 'opiser_ser'
 const MONTH_NAMES = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь']
 const QUARTER_ROMAN = ['I', 'II', 'III', 'IV'] as const
 
+/** periodValue for day = month*100+day (e.g. 915 = 15 сентября) */
 function getPeriodLabels(year: number, periodType: SERPeriodType, periodValue: number): { current: string; comparison: string } {
   const prevYear = year - 1
   if (periodType === 'month') {
@@ -16,6 +17,24 @@ function getPeriodLabels(year: number, periodType: SERPeriodType, periodValue: n
     return {
       current: periodValue === 1 ? `${monthName} ${year} г.` : `${MONTH_NAMES[0]}–${monthName} ${year} г.`,
       comparison: periodValue === 1 ? `${monthName} ${prevYear} г.` : `${MONTH_NAMES[0]}–${monthName} ${prevYear} г.`,
+    }
+  }
+  if (periodType === 'month_single') {
+    const monthName = MONTH_NAMES[periodValue - 1]
+    return {
+      current: `${monthName} ${year} г.`,
+      comparison: `${monthName} ${prevYear} г.`,
+    }
+  }
+  if (periodType === 'day') {
+    const month = Math.floor(periodValue / 100)
+    const day = periodValue % 100
+    const pad = (n: number) => (n < 10 ? '0' + n : String(n))
+    const dateStr = `${pad(day)}.${pad(month)}.${year}`
+    const dateStrPrev = `${pad(day)}.${pad(month)}.${prevYear}`
+    return {
+      current: `${dateStr} г.`,
+      comparison: `${dateStrPrev} г.`,
     }
   }
   const q = QUARTER_ROMAN[periodValue - 1]
@@ -29,9 +48,10 @@ function periodKey(year: number, periodType: string, periodValue: number): strin
   return `${year}_${periodType}_${periodValue}`
 }
 
-function formatHistoryLabel(entry: SERIndicatorHistoryEntry): string {
-  const { current } = getPeriodLabels(entry.year, entry.periodType, entry.periodValue)
-  return `${current} (${entry.updatedAt})`
+function getPeriodTypeForIndicator(slide: 'slide29' | 'slide30', name: string): SERPeriodType {
+  const list = slide === 'slide29' ? SLIDE29_NAMES_UNITS : SLIDE30_NAMES_UNITS
+  const found = list.find((item) => item.name === name)
+  return found?.periodType ?? 'month'
 }
 
 /** Показатели, для которых рост = плохо */
@@ -59,24 +79,26 @@ function calcChangeByUnit(value1: number | string, value2: number | string): num
   return Math.round((n2 - n1) * 1000) / 1000
 }
 
-const SLIDE29_NAMES_UNITS: { name: string; unit: string }[] = [
-  { name: 'ВРП (ИФО)', unit: '%' },
-  { name: 'Вклад МСБ в ВРП', unit: '%' },
-  { name: 'Количество активных субъектов МСБ', unit: 'тыс. ед.' },
-  { name: 'Объём выпуска МСБ', unit: 'млрд тнг' },
-  { name: 'Краткосрочный экономический индикатор', unit: '%' },
-  { name: 'Обрабатывающая промышленность (ИФО)', unit: '%' },
-  { name: 'Инвестиции в основной капитал', unit: 'млрд тнг' },
-  { name: 'Валовый приток иностранных инвестиций', unit: 'млн долл.' },
+/** Стр. 29: тип периода по ТЗ 3.2 (январь–тек.месяц или конкретный день) */
+const SLIDE29_NAMES_UNITS: { name: string; unit: string; periodType: SERPeriodType }[] = [
+  { name: 'ВРП (ИФО)', unit: '%', periodType: 'month' },
+  { name: 'Вклад МСБ в ВРП', unit: '%', periodType: 'month' },
+  { name: 'Количество активных субъектов МСБ', unit: 'тыс. ед.', periodType: 'day' },
+  { name: 'Объём выпуска МСБ', unit: 'млрд тнг', periodType: 'month' },
+  { name: 'Краткосрочный экономический индикатор', unit: '%', periodType: 'month' },
+  { name: 'Обрабатывающая промышленность (ИФО)', unit: '%', periodType: 'month' },
+  { name: 'Инвестиции в основной капитал', unit: 'млрд тнг', periodType: 'month' },
+  { name: 'Валовый приток иностранных инвестиций', unit: 'млн долл.', periodType: 'month' },
 ]
 
-const SLIDE30_NAMES_UNITS: { name: string; unit: string }[] = [
-  { name: 'Инфляция', unit: '%' },
-  { name: 'Уровень безработицы', unit: '%' },
-  { name: 'Индекс реальной зарплаты', unit: '%' },
-  { name: 'Медианная зарплата', unit: 'тыс. тнг' },
-  { name: 'Уровень бедности (доля населения с доходом ниже прожиточного минимума)', unit: '%' },
-  { name: 'Доля расходов населения на продовольствие (в структуре расходов)', unit: '%' },
+/** Стр. 30: тип периода по ТЗ 3.3 (конкретный месяц/день/квартал) */
+const SLIDE30_NAMES_UNITS: { name: string; unit: string; periodType: SERPeriodType }[] = [
+  { name: 'Инфляция', unit: '%', periodType: 'month_single' },
+  { name: 'Уровень безработицы', unit: '%', periodType: 'quarter' },
+  { name: 'Индекс реальной зарплаты', unit: '%', periodType: 'quarter' },
+  { name: 'Медианная зарплата', unit: 'тыс. тнг', periodType: 'day' },
+  { name: 'Уровень бедности (доля населения с доходом ниже прожиточного минимума)', unit: '%', periodType: 'quarter' },
+  { name: 'Доля расходов населения на продовольствие (в структуре расходов)', unit: '%', periodType: 'quarter' },
 ]
 
 const REVENUES_NAMES = ['Всего по доходам', 'Налоговые поступления', 'Неналоговые поступления', 'Поступления от продажи основного капитала', 'Трансферты']
@@ -107,10 +129,16 @@ function defaultExpenses(): SERBudgetRow[] {
   return [total, ...groups]
 }
 
-function createIndicator(slide: 's29' | 's30', i: number, item: { name: string; unit: string }): SERIndicator {
+function defaultPeriodValue(periodType: SERPeriodType): number {
+  if (periodType === 'quarter') return 3
+  if (periodType === 'day') return 101
+  return 9
+}
+
+function createIndicator(slide: 's29' | 's30', i: number, item: { name: string; unit: string; periodType: SERPeriodType }): SERIndicator {
   const year = 2025
-  const periodType: SERPeriodType = 'month'
-  const periodValue = 9
+  const periodType = item.periodType
+  const periodValue = defaultPeriodValue(periodType)
   const { current, comparison } = getPeriodLabels(year, periodType, periodValue)
   return {
     id: `${slide}-${i}`,
@@ -135,22 +163,28 @@ function loadSER(): SERData {
       const parsed = JSON.parse(raw) as SERData & { year?: number; periodType?: SERPeriodType; periodValue?: number }
       if (parsed.slide29?.length && parsed.expenses?.length) {
         const globalYear = parsed.year ?? 2025
-        const globalPeriodType = parsed.periodType ?? 'month'
-        const globalPeriodValue = parsed.periodValue ?? 9
-        const slide29 = parsed.slide29.map((ind: SERIndicator) => ({
-          ...ind,
-          year: ind.year ?? globalYear,
-          periodType: ind.periodType ?? globalPeriodType,
-          periodValue: ind.periodValue ?? globalPeriodValue,
-          history: ind.history ?? [],
-        }))
-        const slide30 = parsed.slide30.map((ind: SERIndicator) => ({
-          ...ind,
-          year: ind.year ?? globalYear,
-          periodType: ind.periodType ?? globalPeriodType,
-          periodValue: ind.periodValue ?? globalPeriodValue,
-          history: ind.history ?? [],
-        }))
+        const slide29 = parsed.slide29.map((ind: SERIndicator) => {
+          const periodType = getPeriodTypeForIndicator('slide29', ind.name)
+          const periodValue = ind.periodValue ?? defaultPeriodValue(periodType)
+          return {
+            ...ind,
+            year: ind.year ?? globalYear,
+            periodType,
+            periodValue,
+            history: ind.history ?? [],
+          }
+        })
+        const slide30 = parsed.slide30.map((ind: SERIndicator) => {
+          const periodType = getPeriodTypeForIndicator('slide30', ind.name)
+          const periodValue = ind.periodValue ?? defaultPeriodValue(periodType)
+          return {
+            ...ind,
+            year: ind.year ?? globalYear,
+            periodType,
+            periodValue,
+            history: ind.history ?? [],
+          }
+        })
         return {
           updatedAt: parsed.updatedAt ?? '',
           slide29,
@@ -215,6 +249,8 @@ function calcPercent(plan: number, execution: number): number {
   return Math.round((execution / plan) * 1000) / 10
 }
 
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
 function IndicatorRow({
   indicator,
   onUpdate,
@@ -224,12 +260,56 @@ function IndicatorRow({
   onUpdate: (id: string, field: keyof SERIndicator, value: number | string) => void
   years: number[]
 }) {
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [selectedHistory, setSelectedHistory] = useState<SERIndicatorHistoryEntry | null>(null)
   const labels = useMemo(() => getPeriodLabels(indicator.year, indicator.periodType, indicator.periodValue), [indicator.year, indicator.periodType, indicator.periodValue])
   const changeVal = calcChangeByUnit(indicator.value1, indicator.value2)
   const changeColor = changeVal !== '' ? getChangeColor(indicator.name, changeVal) : null
-  const history = indicator.history ?? []
+
+  const renderPeriodControl = () => {
+    const { periodType, periodValue } = indicator
+    if (periodType === 'month' || periodType === 'month_single') {
+      return (
+        <select value={periodValue} onChange={(e) => onUpdate(indicator.id, 'periodValue', Number(e.target.value))} style={{ width: 120, padding: 4 }}>
+          {MONTH_NAMES.map((_, i) => (
+            <option key={i} value={i + 1}>{MONTH_NAMES[i]}</option>
+          ))}
+        </select>
+      )
+    }
+    if (periodType === 'quarter') {
+      return (
+        <select value={periodValue} onChange={(e) => onUpdate(indicator.id, 'periodValue', Number(e.target.value))} style={{ width: 70, padding: 4 }}>
+          {QUARTER_ROMAN.map((q, i) => (
+            <option key={q} value={i + 1}>{q} кв.</option>
+          ))}
+        </select>
+      )
+    }
+    const month = Math.floor(periodValue / 100) || 1
+    const day = Math.min(periodValue % 100 || 1, DAYS_IN_MONTH[month - 1] || 31)
+    const maxDay = DAYS_IN_MONTH[month - 1] || 31
+    return (
+      <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+        <select
+          value={month}
+          onChange={(e) => {
+            const newMonth = Number(e.target.value)
+            const newMaxDay = DAYS_IN_MONTH[newMonth - 1] || 31
+            onUpdate(indicator.id, 'periodValue', newMonth * 100 + Math.min(day, newMaxDay))
+          }}
+          style={{ width: 100, padding: 4 }}
+        >
+          {MONTH_NAMES.map((_, i) => (
+            <option key={i} value={i + 1}>{MONTH_NAMES[i]}</option>
+          ))}
+        </select>
+        <select value={day} onChange={(e) => onUpdate(indicator.id, 'periodValue', month * 100 + Number(e.target.value))} style={{ width: 56, padding: 4 }}>
+          {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </span>
+    )
+  }
 
   return (
     <tr key={indicator.id}>
@@ -241,25 +321,7 @@ function IndicatorRow({
           ))}
         </select>
       </td>
-      <td>
-        <select value={indicator.periodType} onChange={(e) => onUpdate(indicator.id, 'periodType', e.target.value)} style={{ width: 70, padding: 4 }}>
-          <option value="month">Месяц</option>
-          <option value="quarter">Квартал</option>
-        </select>
-        {indicator.periodType === 'month' ? (
-          <select value={indicator.periodValue} onChange={(e) => onUpdate(indicator.id, 'periodValue', Number(e.target.value))} style={{ width: 100, marginLeft: 4, padding: 4 }}>
-            {MONTH_NAMES.map((_, i) => (
-              <option key={i} value={i + 1}>{MONTH_NAMES[i]}</option>
-            ))}
-          </select>
-        ) : (
-          <select value={indicator.periodValue} onChange={(e) => onUpdate(indicator.id, 'periodValue', Number(e.target.value))} style={{ width: 60, marginLeft: 4, padding: 4 }}>
-            {QUARTER_ROMAN.map((q, i) => (
-              <option key={q} value={i + 1}>{q} кв.</option>
-            ))}
-          </select>
-        )}
-      </td>
+      <td>{renderPeriodControl()}</td>
       <td>{labels.comparison}</td>
       <td>
         <input type="text" value={String(indicator.value1)} onChange={(e) => onUpdate(indicator.id, 'value1', e.target.value)} style={{ width: 80, border: '1px solid var(--border)', borderRadius: 4, padding: 4 }} />
@@ -272,40 +334,6 @@ function IndicatorRow({
         <input type="text" value={String(indicator.value2)} onChange={(e) => onUpdate(indicator.id, 'value2', e.target.value)} style={{ width: 80, border: '1px solid var(--border)', borderRadius: 4, padding: 4 }} />
       </td>
       <td>{indicator.unit}</td>
-      <td>
-        <div style={{ position: 'relative' }}>
-          <button type="button" className="btn btn-secondary" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => setHistoryOpen(!historyOpen)}>
-            История
-          </button>
-          {historyOpen && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setHistoryOpen(false)} />
-              <div style={{ position: 'absolute', left: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 11, minWidth: 220, maxHeight: 280, overflow: 'auto' }}>
-                {history.length === 0 ? (
-                  <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 13 }}>Нет сохранённых периодов</div>
-                ) : (
-                  <ul style={{ listStyle: 'none', margin: 0, padding: 8 }}>
-                    {[...history].reverse().map((entry, idx) => (
-                      <li key={idx}>
-                        <button type="button" style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: selectedHistory === entry ? 'var(--primary-light, #e8eeff)' : 'transparent', borderRadius: 4, cursor: 'pointer', fontSize: 13 }} onClick={() => setSelectedHistory(selectedHistory === entry ? null : entry)}>
-                          {formatHistoryLabel(entry)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {selectedHistory && (
-                <div style={{ marginTop: 8, padding: 10, background: 'var(--bg-muted)', borderRadius: 6, fontSize: 12 }}>
-                  <div><strong>Период:</strong> {formatHistoryLabel(selectedHistory)}</div>
-                  <div>Значение за период сравнения: {String(selectedHistory.value1)}</div>
-                  <div>Значение за текущий период: {String(selectedHistory.value2)}</div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </td>
     </tr>
   )
 }
@@ -320,11 +348,21 @@ export default function SER() {
       ...d,
       [slide]: d[slide].map((i) => {
         if (i.id !== id) return i
-        const next = { ...i, [field]: value }
+        const next = { ...i, [field]: value } as SERIndicator
         if (field === 'year' || field === 'periodType' || field === 'periodValue') {
           const labels = getPeriodLabels(next.year, next.periodType, next.periodValue)
           next.period1 = labels.comparison
           next.period2 = labels.current
+          const key = periodKey(next.year, next.periodType, next.periodValue)
+          const history = next.history ?? []
+          const entry = history.find((h) => periodKey(h.year, h.periodType, h.periodValue) === key)
+          if (entry) {
+            next.value1 = entry.value1
+            next.value2 = entry.value2
+          } else {
+            next.value1 = ''
+            next.value2 = ''
+          }
         }
         return next
       }),
@@ -432,7 +470,6 @@ export default function SER() {
                 <th>Текущий период</th>
                 <th>Значение</th>
                 <th>Ед. изм.</th>
-                <th>История</th>
               </tr>
             </thead>
             <tbody>
@@ -457,7 +494,6 @@ export default function SER() {
                 <th>Текущий период</th>
                 <th>Значение</th>
                 <th>Ед. изм.</th>
-                <th>История</th>
               </tr>
             </thead>
             <tbody>

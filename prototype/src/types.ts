@@ -101,7 +101,8 @@ export interface SERBudgetRow {
   sharePercent?: number
 }
 
-export type SERPeriodType = 'month' | 'quarter'
+/** month = январь–тек.месяц; month_single = конкретный месяц; day = конкретный день; quarter = конкретный квартал */
+export type SERPeriodType = 'month' | 'quarter' | 'day' | 'month_single'
 
 export interface SERData {
   updatedAt: string
