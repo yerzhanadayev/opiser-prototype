@@ -237,6 +237,14 @@ tr:last-child td {
   border-bottom: none;
 }
 
+/* Поручения ГГ: объединённая ячейка протокола */
+.orders-gg-protocol-cell {
+  vertical-align: top;
+  font-size: 13px;
+  font-weight: 500;
+  background: #f8fafc;
+}
+
 tr:hover td {
   background: #f9fafb;
 }
@@ -257,6 +265,10 @@ tr:hover td {
   border-radius: 6px;
   font-size: 14px;
   min-width: 160px;
+}
+
+.filters-bar input[type="date"] {
+  min-width: 140px;
 }
 
 /* Drawer */

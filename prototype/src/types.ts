@@ -38,31 +38,69 @@ export interface Party {
   status: LeaderStatus
 }
 
-export interface RiskMapRecord {
+/** Вкладка ОПС/РС — стр. 20 (ТЗ 2.1 п. 3.2) */
+export type RiskMapOpsRecordType = 'ОПС' | 'РС'
+export type RiskMapOpsStatus = 'Активный' | 'Архивный'
+
+export interface RiskMapOpsRecord {
   id: string
-  territory: string
-  riskType: string
-  riskLevel: string
-  indicator: string
+  recordType: RiskMapOpsRecordType
+  title: string
+  description: string
   measures: string
-  slide?: number
+  status: RiskMapOpsStatus
+  createdAt: string
+  updatedAt: string
+}
+
+/** Вкладка «Карта социальных рисков» — стр. 21–23 (ТЗ 2.1 п. 3.3; в прототипе без номера слайда в UI) */
+export type RiskMapCardRecordType = 'Системный риск' | 'Очаг социальной напряжённости'
+export type RiskMapCardLevel = 'Красный' | 'Оранжевый' | 'Жёлтый'
+
+export interface RiskMapCardRecord {
+  id: string
+  recordType: RiskMapCardRecordType
+  title: string
+  description: string
+  measures: string
+  level: RiskMapCardLevel
+  status: RiskMapOpsStatus
+  createdAt: string
+  updatedAt: string
 }
 
 export interface RiskMapData {
-  period: string
+  /** Дата последнего сохранения модуля */
   updatedAt: string
-  summary20: string
-  records: RiskMapRecord[]
+  opsRecords: RiskMapOpsRecord[]
+  mapRecords: RiskMapCardRecord[]
 }
 
+/**
+ * Поручение ГГ — строка таблицы по ТЗ 3.1 (данные из модуля «Поручения», мок — со слайдов 24–28).
+ */
 export interface OrderGG {
   id: string
-  number: string
-  description: string
-  executor: string
-  deadline: string
-  status: string
-  lastComment: string
+  /** Ключ группы для объединения ячейки «Протокол» */
+  protocolKey: string
+  /** Наименование протокола (как на слайде) */
+  protocolTitle: string
+  /** № п/п в рамках протокола */
+  orderInProtocol: number
+  /** Номер документа: приказ/поручение, пункт, дата */
+  documentRef: string
+  /** Текст содержания поручения */
+  content: string
+  /** Первоначальный срок (строка для отображения) */
+  initialDeadline: string
+  /** Текущий / предварительный срок */
+  currentDeadline: string
+  /** Блок исполнителей из поручения (респ./отраслевой) */
+  executorsNational: string
+  /** Городское управление-исполнитель */
+  executorsCityDept: string
+  /** Ход реализации — ответ инспектора по последнему актуальному исполнению */
+  implementation: string
 }
 
 export interface SERIndicator {
